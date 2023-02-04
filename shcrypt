@@ -1,0 +1,143 @@
+#!/bin/bash
+# shcrypt
+# Password protect encrypt shell files / variables or text
+# using openssl enc
+#
+
+function usage
+{
+    cat - <<EOF
+usage:
+    shell encrypt: shcrypt -s[cu] <file|-> [<passvar>]
+    var encrypt  : shcrypt -v[cu] <varname> [<passvar>]
+    text encrypt : shcrypt -t[cu] <file|-> [<passvar>]
+
+    * Encrypt to a sourceable shell code protected by password:
+      $ shcrypt -s <<<'myvar="mysecret"' >config.env
+
+    * Encrypt to a sourceable shell with variable content protected by password:
+      $ shcrypt -v myvar <<'mysecret' >config.env
+
+    * Encrypt to a shell that will output the content when sourced/executed:
+      $ shcrypt -t <<<'mysecret' >mysecret.sh
+    
+    * -(s|v|t) : password required each time sourcing shell
+    * -(sc|vc|tc) :
+            the password is cached in shell local variable <passvar>
+            the password is securely passed to openssl through fd
+    * -(scu|vcu|tcu) :
+            the password is cached in shell local variable <passvar>
+            the password is passed to openssl through -pass:<pass>
+            /!\ the password will appear in process table when decrypting
+
+    * <passvar> : name of the variable to put cached password
+                  the password will be cached base64 encoded 
+                  in $passvar[$$]
+                  needed if want to share same cache for multiple
+                  env files
+                  default: uuid based varname
+EOF
+    exit 1
+}
+
+function encvar
+{
+    read -s -p 'Secret : ' secret
+    echo '' >&2
+    echo "$1="'$(openssl enc -aes-256-cbc -md sha512 -d -a <<EOZ 2>/dev/null'"|grep -x '.*'
+$(openssl enc -aes-256-cbc -md sha512 -salt -a <<<"$secret" 2>/dev/null)
+EOZ
+) ||{ echo 'ERROR: Decrypt failed'; }"
+}
+
+function encvarcache
+{
+    read -s -p 'Secret : ' secret;echo >&2
+    echo ': ${'$p$':=$(bash -c \'read -s -p "'$icon$'Password: " p;echo >&2;echo "$p"\'|base64)}'"
+$1="'$(openssl enc -aes-256-cbc -md sha512 -d -a -pass fd:3 <<EOZ 3<<<$(base64 -d <<<"${'$p'}") 2>/dev/null'"|grep -x '.*'
+$(openssl enc -aes-256-cbc -md sha512 -salt -a <<<"$secret" 2>/dev/null)
+EOZ
+) ||{ echo 'ERROR: Decrypt failed';unset $p; }"
+}
+
+# unsafe: password visible on process table during decrypt
+function encvarcache2
+{
+    read -s -p 'Secret : ' secret
+    echo >&2
+    echo ': ${'$p$':=$(bash -c \'read -s -p "'$icon$'Password: " p;echo >&2;echo "$p"\'|base64)}'"
+$1="'$(openssl enc -aes-256-cbc -md sha512 -d -a -pass pass:$(base64 -d <<<"${'$p'}") <<EOZ 2>/dev/null'"|grep -x '.*'
+$(openssl enc -aes-256-cbc -md sha512 -salt -a <<<"$secret" 2>/dev/null)
+EOZ
+) ||{ echo 'ERROR: Decrypt failed';unset $p; }"
+}
+
+function encsh
+{
+    echo 'eval $(openssl enc -aes-256-cbc -md sha512 -d -a <<EOZ 2>/dev/null'"|grep -x '.*'
+$(openssl enc -aes-256-cbc -md sha512 -salt -a -in ${1:--} 2>/dev/null)
+EOZ
+) ||{ echo 'ERROR: Decrypt failed'; }"
+}
+
+function encshcache
+{
+    echo ': ${'$p$':=$(bash -c \'read -s -p "'$icon$'Password: " p;echo >&2;echo "$p"\'|base64)}
+eval $(openssl enc -aes-256-cbc -md sha512 -d -a -pass fd:3 <<EOZ 3<<<$(base64 -d <<<"${'$p'}") 2>/dev/null'"|grep -x '.*'
+$(openssl enc -aes-256-cbc -md sha512 -salt -a -in ${1:--} 2>/dev/null)
+EOZ
+) ||{ echo 'ERROR: Decrypt failed';unset $p; }"
+}
+
+function encshcache2
+{
+    echo ': ${'$p$':=$(bash -c \'read -s -p "'$icon$'Password: " p;echo >&2;echo "$p"\'|base64)}
+eval $(openssl enc -aes-256-cbc -md sha512 -d -a -pass pass:$(base64 -d <<<"${'$p'}") <<EOZ 2>/dev/null'"|grep -x '.*'
+$(openssl enc -aes-256-cbc -md sha512 -salt -a -in ${1:--} 2>/dev/null)
+EOZ
+) ||{ echo 'ERROR: Decrypt failed';unset $p; }"
+}
+
+function enctext
+{
+    echo 'openssl enc -aes-256-cbc -md sha512 -d -a <<EOZ 2>/dev/null'"|grep -x '.*' ||{ echo 'ERROR: Decrypt failed';unset $p; }
+$(openssl enc -aes-256-cbc -md sha512 -salt -a -in ${1:--} 2>/dev/null)
+EOZ"
+}
+
+function enctextcache
+{
+    echo ': ${'$p$':=$(bash -c \'read -s -p "'$icon$'Password: " p;echo >&2;echo "$p"\'|base64)}
+openssl enc -aes-256-cbc -md sha512 -d -a -pass fd:3 <<EOZ 3<<<$(base64 -d <<<"${'$p'}") 2>/dev/null'"|grep -x '.*' ||{ echo 'ERROR: Decrypt failed';unset $p; }
+$(openssl enc -aes-256-cbc -md sha512 -salt -a -in ${1:--} 2>/dev/null)
+EOZ"
+}
+
+function enctextcache
+{
+    echo ': ${'$p$':=$(bash -c \'read -s -p "'$icon$'Password: " p;echo >&2;echo "$p"\'|base64)}
+openssl enc -aes-256-cbc -md sha512 -d -a -pass pass:$(base64 -d <<<"${'$p'}") <<EOZ 2>/dev/null'"|grep -x '.*' ||{ echo 'ERROR: Decrypt failed';unset $p; }
+$(openssl enc -aes-256-cbc -md sha512 -salt -a -in ${1:--} 2>/dev/null)
+EOZ"
+}
+
+PATH='/bin:/usr/bin'
+opt=$1
+shift
+p=${2:-__$(sed 's/[-]//g' /proc/sys/kernel/random/uuid 2>/dev/null)}
+: ${p:=__$(uuidgen 2>/dev/null|sed 's/[-]//g' /proc/sys/kernel/random/uuid)}
+: ${p:=__shc_$RANDOM}
+p="$p"'[$$]'
+icon='🔐'
+case "$opt" in
+    -v) encvar "$@";;
+    -vc) encvarcache "$@";;
+    -vcu) encvarcache2 "$@";;
+    -s) encsh "$@";;
+    -sc) encshcache "$@";;
+    -scu) encshcache2 "$@";;
+    -t) enctext "$@";;
+    -tc) enctextcache "$@";;
+    -tcu) enctextcache2 "$@";;
+    *) usage;
+esac
