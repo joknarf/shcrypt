@@ -99,9 +99,9 @@ EOF
 
 function encsh
 {
-    cat - <<EOF
+    cat $1 <<EOF
 eval \$($ossldec <<EOZ 2>/dev/null |grep -x '.*'
-$($osslenc -in ${1:--} 2>/dev/null)
+$($osslenc 2>/dev/null)
 EOZ
 ) ||{ echo 'ERROR: Decrypt failed' >&2; }
 EOF
@@ -109,10 +109,10 @@ EOF
 
 function encshcache
 {
-    cat - <<EOF
+    cat $1 <<EOF
 $cachepass
 eval \$($ossldec -pass fd:3 <<EOZ 3<<<\$(base64 -d <<<"\${$p}") 2>/dev/null |grep -x '.*'
-$($osslenc -in ${1:--} 2>/dev/null)
+$($osslenc 2>/dev/null)
 EOZ
 ) ||{ echo 'ERROR: Decrypt failed' >&2;unset $p; }
 EOF
@@ -120,10 +120,10 @@ EOF
 
 function encshcache2
 {
-    cat - <<EOF
+    cat $1 <<EOF
 $cachepass
 eval \$($ossldec -pass pass:\$(base64 -d <<<"\${$p}") <<EOZ 2>/dev/null |grep -x '.*'
-$($osslenc -in ${1:--} 2>/dev/null)
+$($osslenc 2>/dev/null)
 EOZ
 ) ||{ echo 'ERROR: Decrypt failed' >&2;unset $p; }
 EOF
@@ -131,9 +131,9 @@ EOF
 
 function encshkey
 {
-    cat - <<EOF
+    cat $1 <<EOF
 eval \$($ossldeckey |grep -x '.*' 
-$($osslenc -in ${1:--} -pass fd:3 3<<<"$signpass" 2>/dev/null)
+$($osslenc -pass fd:3 3<<<"$signpass" 2>/dev/null)
 EOZ
 ) ||{ echo 'ERROR: Decrypt failed' >&2; }
 EOF
@@ -142,38 +142,39 @@ EOF
 
 function enctext
 {
-    cat - <<EOF
+    (cat $1 <<EOF
 $ossldec <<EOZ 2>/dev/null $pipecmd||{ echo 'ERROR: Decrypt failed' >&2; }
-$($osslenc -in ${1:--} 2>/dev/null)
+$($osslenc 2>/dev/null)
 EOZ
 EOF
+    )
 }
 
 function enctextcache
 {
-    cat - <<EOF
+    cat $1 <<EOF
 $cachepass
 $ossldec -pass fd:3 <<EOZ 3<<<\$(base64 -d <<<"\${$p}") 2>/dev/null $pipecmd||{ echo 'ERROR: Decrypt failed' >&2;unset $p; }
-$($osslenc -in ${1:--} 2>/dev/null)
+$($osslenc 2>/dev/null)
 EOZ
 EOF
 }
 
 function enctextcache2
 {
-    cat - <<EOF
+    cat $1 <<EOF
 $cachepass
 $ossldec -pass pass:\$(base64 -d <<<"\${$p}") <<EOZ 2>/dev/null $pipecmd||{ echo 'ERROR: Decrypt failed' >&2;unset $p; }
-$($osslenc -in ${1:--} 2>/dev/null)
+$($osslenc 2>/dev/null)
 EOZ
 EOF
 }
 
 function enctextkey
 {
-    cat - <<EOF
+    cat $1 <<EOF
 $ossldeckey $pipecmd||{ echo 'ERROR: Decrypt failed' >&2; }
-$($osslenc -in ${1:--} -pass fd:3 3<<<"$signpass" 2>/dev/null)
+$($osslenc -pass fd:3 3<<<"$signpass" 2>/dev/null)
 EOZ
 EOF
 }
