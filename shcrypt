@@ -48,7 +48,7 @@ function encvar
     echo "$1="'$('$ossldec' <<EOZ 2>/dev/null'"|grep -x '.*'
 $($osslenc <<<"$secret" 2>/dev/null)
 EOZ
-) ||{ echo 'ERROR: Decrypt failed'; }"
+) ||{ echo 'ERROR: Decrypt failed' >&2; }"
 }
 
 function encvarcache
@@ -58,7 +58,7 @@ function encvarcache
 $1="'$('$ossldec' -pass fd:3 <<EOZ 3<<<$(base64 -d <<<"${'$p'}") 2>/dev/null'"|grep -x '.*'
 $($osslenc <<<"$secret" 2>/dev/null)
 EOZ
-) ||{ echo 'ERROR: Decrypt failed';unset $p; }"
+) ||{ echo 'ERROR: Decrypt failed' >&2;unset $p; }"
 }
 
 # unsafe: password visible on process table during decrypt
@@ -69,7 +69,7 @@ function encvarcache2
 $1="'$('$ossldec' -pass pass:$(base64 -d <<<"${'$p'}") <<EOZ 2>/dev/null'"|grep -x '.*'
 $($osslenc <<<"$secret" 2>/dev/null)
 EOZ
-) ||{ echo 'ERROR: Decrypt failed';unset $p; }"
+) ||{ echo 'ERROR: Decrypt failed' >&2;unset $p; }"
 }
 
 function encsh
@@ -77,7 +77,7 @@ function encsh
     echo 'eval $('$ossldec' <<EOZ 2>/dev/null'"|grep -x '.*'
 $($osslenc -in ${1:--} 2>/dev/null)
 EOZ
-) ||{ echo 'ERROR: Decrypt failed'; }"
+) ||{ echo 'ERROR: Decrypt failed' >&2; }"
 }
 
 function encshcache
@@ -86,7 +86,7 @@ function encshcache
 eval $('$ossldec' -pass fd:3 <<EOZ 3<<<$(base64 -d <<<"${'$p'}") 2>/dev/null'"|grep -x '.*'
 $($osslenc -in ${1:--} 2>/dev/null)
 EOZ
-) ||{ echo 'ERROR: Decrypt failed';unset $p; }"
+) ||{ echo 'ERROR: Decrypt failed' >&2;unset $p; }"
 }
 
 function encshcache2
@@ -95,12 +95,12 @@ function encshcache2
 eval $('$ossldec' -pass pass:$(base64 -d <<<"${'$p'}") <<EOZ 2>/dev/null'"|grep -x '.*'
 $($osslenc -in ${1:--} 2>/dev/null)
 EOZ
-) ||{ echo 'ERROR: Decrypt failed';unset $p; }"
+) ||{ echo 'ERROR: Decrypt failed' >&2;unset $p; }"
 }
 
 function enctext
 {
-    echo "$ossldec <<EOZ 2>/dev/null|grep -x '.*' ||{ echo 'ERROR: Decrypt failed';unset $p; }
+    echo "$ossldec <<EOZ 2>/dev/null ||{ echo 'ERROR: Decrypt failed' >&2; }
 $($osslenc -in ${1:--} 2>/dev/null)
 EOZ"
 }
@@ -108,7 +108,7 @@ EOZ"
 function enctextcache
 {
     echo "$cachepass
-$ossldec"' -pass fd:3 <<EOZ 3<<<$(base64 -d <<<"${'$p'}") 2>/dev/null'"|grep -x '.*' ||{ echo 'ERROR: Decrypt failed';unset $p; }
+$ossldec"' -pass fd:3 <<EOZ 3<<<$(base64 -d <<<"${'$p'}") 2>/dev/null'" ||{ echo 'ERROR: Decrypt failed' >&2;unset $p; }
 $($osslenc -a -in ${1:--} 2>/dev/null)
 EOZ"
 }
@@ -116,7 +116,7 @@ EOZ"
 function enctextcache2
 {
     echo "$cachepass
-$ossldec"' -pass pass:$(base64 -d <<<"${'$p'}") <<EOZ 2>/dev/null'"|grep -x '.*' ||{ echo 'ERROR: Decrypt failed';unset $p; }
+$ossldec"' -pass pass:$(base64 -d <<<"${'$p'}") <<EOZ 2>/dev/null'" ||{ echo 'ERROR: Decrypt failed' >&2;unset $p; }
 $($osslenc -in ${1:--} 2>/dev/null)
 EOZ"
 }
@@ -130,7 +130,7 @@ p=${2:-__$(sed 's/[-]//g' /proc/sys/kernel/random/uuid 2>/dev/null)}
 : ${p:=__$(uuidgen 2>/dev/null|sed 's/[-]//g' /proc/sys/kernel/random/uuid)}
 : ${p:=__shc_$RANDOM}
 p="$p"'[$$]'
-icon='🔐'
+icon='🔐' # :\U1F510
 cachepass=': ${'$p$':=$(bash -c \'read -s -p "'$icon$'Password: " p;echo >&2;echo "$p"\'|base64)}'
 case "$opt" in
     -v) encvar "$@";;
