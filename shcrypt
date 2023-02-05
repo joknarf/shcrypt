@@ -122,8 +122,8 @@ EOZ"
 }
 
 PATH='/bin:/usr/bin'
-osslenc='openssl enc -aes-256-cbc -md sha512 -salt -a'
-ossldec='openssl enc -aes-256-cbc -md sha512 -a -d'
+osslenc='openssl enc -aes256 -md sha512 -salt -a'
+ossldec='openssl enc -aes256 -md sha512 -a -d'
 opt=$1
 shift
 p=${2:-__$(sed 's/[-]//g' /proc/sys/kernel/random/uuid 2>/dev/null)}
