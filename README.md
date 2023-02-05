@@ -56,25 +56,25 @@ The secrets can be loaded from stdin
     ...
     ```
     ```
-    $ shcrypt -s ./secret.env >./secret.enc
+    $ shcrypt -s ./config.env >./secret.env
     enter AES-256-CBC encryption password:
     Verifying - enter AES-256-CBC encryption password:
     ```
 * decrypt and source in current shell:
     ```
-    $ . ./secret.enc
+    $ . ./secret.env
     enter AES-256-CBC decryption password: 
     $ echo $myvar
     mysecret
     ```
-* Look at the file generated (`secret.enc`):
+* Look at the file generated (`secret.env`):
     ```
-    eval $(openssl enc -aes-256-cbc -md sha512 -a -d <<EOZ 2>/dev/null|grep -x '.*'
+    eval $(openssl enc -aes256 -md sha512 -a -d <<EOZ 2>/dev/null|grep -x '.*'
     U2FsdGVkX1+ZauSKeakM4+Mci2U/w3PWw3wVU8Xrf3UeYVv8jjVUsAcRPQTFRwPR
     EOZ
     ) ||{ echo 'ERROR: Decrypt failed'; }  
     ```
-    The file includes the openssl command needed to decrypt the shell env file, and `eval` it content  
+    The file includes the openssl command needed to decrypt the shell env file, and `eval` its content  
     An error messsage will be displayed if decryption failed (wrong password)  
     You can of course add/customize shell inside this file.  
 
@@ -85,14 +85,14 @@ we'll be using password cache this time
 * crypt single variable to env file
     need to store the secret `mysecret` into myvar
     ```
-    $ shcrypt -vc myvar >myvar.enc
+    $ shcrypt -vc myvar >myvar.env
     Secret value: <not echoing input value>
     enter AES-256-CBC encryption password:
     Verifying - enter AES-256-CBC encryption password:
     ```
 * decrypt and source single variable:
     ```
-    $ . ./myvar.enc
+    $ . ./myvar.env
     🔐Password: 
     $ echo $myvar
     mysecret
@@ -101,7 +101,7 @@ we'll be using password cache this time
 * Look at the file generated:
     ```
     : ${__edbb11c1188d457ab07efa555646aebe[$$]:=$(bash -c 'read -s -p "🔐Password: " p;echo >&2;echo "$p"'|base64)}
-    myvar=$(openssl enc -aes-256-cbc -md sha512 -a -d -pass fd:3 <<EOZ 3<<<$(base64 -d <<<"${__edbb11c1188d457ab07efa555646aebe[$$]}") 2>/dev/null|grep -x '.*'
+    myvar=$(openssl enc -aes256 -md sha512 -a -d -pass fd:3 <<EOZ 3<<<$(base64 -d <<<"${__edbb11c1188d457ab07efa555646aebe[$$]}") 2>/dev/null|grep -x '.*'
     U2FsdGVkX18dWr6IiYksXJv31qLGmqBrtVKZW8UE4Fc=
     EOZ
     ) ||{ echo 'ERROR: Decrypt failed';unset __edbb11c1188d457ab07efa555646aebe[$$]; }
