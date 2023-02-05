@@ -1,5 +1,5 @@
 # shcrypt
-openssl encrypt shell/text protected by password to autodecrypt shell
+openssl encrypt shell/text/bin/tarzip protected by password to autodecrypt shell
 
 `shcrypt` is a small utility to store secrets in shell environment file, that can be sourced providing a password.  
 Prevent having clear password stored in files, without complicated gpg / vault ... configurations and dependencies.  
