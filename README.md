@@ -14,9 +14,16 @@ The generated files are shell, and can be modified to add other variables not en
 The generated files acts like auto-decrypt with password
 
 ## usage
->    shell content encrypt : `shcrypt -s[cu] <file|-> [<passvar>]`  
->    shell variable encrypt  : `shcrypt -v[cu] <varname> [<passvar>]`  
->    text/any encrypt : `shcrypt -t[cu] <file|-> [<passvar>]`  
+
+| Usage                    | Command line                                 |
+|--------------------------|----------------------------------------------|
+| shell content encrypt    | `shcrypt -s[cu] <file\|-> [<passvar>]`       |
+| shell variable encrypt   | `shcrypt -v[cu] <varname> [<passvar>]`       |
+| text/any encrypt         | `shcrypt -t[cu] <file\|-> [<passvar>]`       |
+| bash exec encrypt        | `shcrypt -b[cu] <file\|-> [<passvar>]`       |
+| targz encrypt            | `shcrypt -z[cu] <tar files>`                 |
+
+
 
 The secrets can be loaded from stdin
 
@@ -29,7 +36,14 @@ The secrets can be loaded from stdin
 
 * Encrypt to a shell that will output the content when sourced/executed:  
       `$ shcrypt -t <<<'mysecret' >mysecret.sh`
-    
+
+* Encrypt to a shell that will be executed by bash after decrypt:  
+      `$ shcrypt -b <<<'echo "$@"' >myscript.sh`
+
+* Encrypt tar zipped to auto-decrypt/extract script:  
+      `$ shcrypt -z ./mydir >mydir.xtgz`
+
+
 * `-(s|v|t)` : password required each time sourcing shell
 * `-(sc|vc|tc)` : (`c` for cache password)  
             the password is cached in shell local variable `<passvar>`  
@@ -124,6 +138,38 @@ we'll be using password cache this time
     $ . ./secret.sh
     🔐Password: 
     my secret text
+    ```
+
+### crypt bash shell to execute
+
+* crypt a bash shell script to execute:
+    ```
+    $ shcrypt -bc <<<'echo "myscript executed with : $@"' >./myscript.sh
+    enter AES-256-CBC encryption password:
+    Verifying - enter AES-256-CBC encryption password:
+    ```
+* decrypt and execute the shell with params:
+    ```
+    $ . ./myscript.sh arg1 arg2
+    🔐Password: 
+    myscript executed with : arg1 arg2
+    ```
+
+### tar and crypt to auto decrypt/untar script
+
+* tar files/directories to crypted autoextract script:
+    ```
+    $ shcrypt -zc ./mydir >./mydir.xtgz
+    enter AES-256-CBC encryption password:
+    Verifying - enter AES-256-CBC encryption password:
+    ```
+* decrypt and execute the shell with params:
+    ```
+    $ . ./mydir.xtgz
+    🔐Password: 
+    ./mydir/
+    ./mydir/myfile1
+    ./mydir/myfile2
     ```
 
 ## Reminders

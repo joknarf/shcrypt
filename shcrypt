@@ -1,16 +1,19 @@
 #!/bin/bash
 # shcrypt
-# Password protect encrypt shell files / variables or text
+# Password protect encrypt shell files / variables or text/binary
 # using openssl enc
+# Author: Franck Jouvanceau
 #
 
 function usage
 {
     cat - <<'EOF' >&2
 usage:
-    shell encrypt: shcrypt -s[cu] <file|-> [<passvar>]
-    var encrypt  : shcrypt -v[cu] <varname> [<passvar>]
-    text encrypt : shcrypt -t[cu] <file|-> [<passvar>]
+    shell encrypt    : shcrypt -s[cu] <file|-> [<passvar>]
+    var encrypt      : shcrypt -v[cu] <varname> [<passvar>]
+    text/bin encrypt : shcrypt -t[cu] <file|-> [<passvar>]
+    bash exec encrypt: shcrypt -b[cu] <file|-> [<passvar>]
+    targz encrypt    : shcrypt -z[cu] <tar files>
 
     * Encrypt to a sourceable shell code protected by password:
       $ shcrypt -s <<<'myvar="mysecret"' >config.env
@@ -19,14 +22,20 @@ usage:
       $ shcrypt -v myvar <<<'mysecret' >config.env
       if no stdin value, the secret to store will be asked without echoing
 
-    * Encrypt to a shell that will output the content when sourced/executed:
+    * Encrypt to a shell that will output the decrypted content when sourced/executed:
       $ shcrypt -t <<<'mysecret' >mysecret.sh
     
-    * -(s|v|t) : password required each time sourcing shell
-    * -(sc|vc|tc) :
+    * Encrypt to a shell that will be executed by bash after decrypt:
+      $ shcrypt -b <<<'echo "$@"' >myscript.sh
+
+    * Encrypt tar zipped to auto-decrypt/extract script:
+      $ shcrypt -z ./mydir >mydir.xtgz
+
+    * -(s|v|t|b|z) : password required each time sourcing shell
+    * -(sc|vc|tc|bc|zc) :
             the password is cached in shell local variable <passvar>
             the password is securely passed to openssl through fd
-    * -(scu|vcu|tcu) :
+    * -(scu|vcu|tcu|bcu|zcu) :
             the password is cached in shell local variable <passvar>
             the password is passed to openssl through -pass pass:<pass>
             /!\ the password will appear in process table when decrypting
@@ -100,7 +109,7 @@ EOZ
 
 function enctext
 {
-    echo "$ossldec <<EOZ 2>/dev/null ||{ echo 'ERROR: Decrypt failed' >&2; }
+    echo "$ossldec <<EOZ 2>/dev/null $pipecmd||{ echo 'ERROR: Decrypt failed' >&2; }
 $($osslenc -in ${1:--} 2>/dev/null)
 EOZ"
 }
@@ -108,15 +117,15 @@ EOZ"
 function enctextcache
 {
     echo "$cachepass
-$ossldec"' -pass fd:3 <<EOZ 3<<<$(base64 -d <<<"${'$p'}") 2>/dev/null'" ||{ echo 'ERROR: Decrypt failed' >&2;unset $p; }
-$($osslenc -a -in ${1:--} 2>/dev/null)
+$ossldec"' -pass fd:3 <<EOZ 3<<<$(base64 -d <<<"${'$p'}") 2>/dev/null'" $pipecmd||{ echo 'ERROR: Decrypt failed' >&2;unset $p; }
+$($osslenc -in ${1:--} 2>/dev/null)
 EOZ"
 }
 
 function enctextcache2
 {
     echo "$cachepass
-$ossldec"' -pass pass:$(base64 -d <<<"${'$p'}") <<EOZ 2>/dev/null'" ||{ echo 'ERROR: Decrypt failed' >&2;unset $p; }
+$ossldec"' -pass pass:$(base64 -d <<<"${'$p'}") <<EOZ 2>/dev/null'" $pipecmd||{ echo 'ERROR: Decrypt failed' >&2;unset $p; }
 $($osslenc -in ${1:--} 2>/dev/null)
 EOZ"
 }
@@ -126,12 +135,17 @@ osslenc='openssl enc -aes256 -md sha512 -salt -a'
 ossldec='openssl enc -aes256 -md sha512 -a -d'
 opt=$1
 shift
-p=${2:-__$(sed 's/[-]//g' /proc/sys/kernel/random/uuid 2>/dev/null)}
+[[ $opt != -t* ]] && p=$2 || p='' 
+: ${p:=__$(sed 's/[-]//g' /proc/sys/kernel/random/uuid 2>/dev/null)}
 : ${p:=__$(uuidgen 2>/dev/null|sed 's/[-]//g' /proc/sys/kernel/random/uuid)}
 : ${p:=__shc_$RANDOM}
 p="$p"'[$$]'
 icon='🔐' # :\U1F510
 cachepass=': ${'$p$':=$(bash -c \'read -s -p "'$icon$'Password: " p;echo >&2;echo "$p"\'|base64)}'
+bashexec='| bash -s "$@"'
+tarexec='| tar xzvf - "$@"'
+pipecmd=''
+
 case "$opt" in
     -v) encvar "$@";;
     -vc) encvarcache "$@";;
@@ -142,5 +156,11 @@ case "$opt" in
     -t) enctext "$@";;
     -tc) enctextcache "$@";;
     -tcu) enctextcache2 "$@";;
+    -b) pipecmd="$bashexec"; enctext "$@";;
+    -bc) pipecmd="$bashexec"; enctextcache "$@";;
+    -bcu) pipecmd="$bashexec"; enctextcache2 "$@";;
+    -z) pipecmd="$tarexec"; tar czf - "$@" |enctext;;
+    -zc) pipecmd="$tarexec"; tar czf - "$@" |enctextcache;;
+    -zcu) pipecmd="$tarexec"; tar czf - "$@" |enctextcache2;;
     *) usage;
 esac
