@@ -52,7 +52,7 @@ EOF
 
 function encvar
 {
-    read -s -p 'Secret : ' secret; echo '' >&2
+    read -s -p "$icon"'Secret : ' secret; echo '' >&2
     cat - <<EOF
 $1=\$($ossldec <<EOZ 2>/dev/null |grep -x '.*'
 $($osslenc <<<"$secret" 2>/dev/null)
@@ -63,7 +63,7 @@ EOF
 
 function encvarcache
 {
-    read -s -p 'Secret value: ' secret; echo >&2
+    read -s -p "$icon"'Secret value: ' secret; echo >&2
     cat - <<EOF
 $cachepass
 $1=\$($ossldec -pass fd:3 <<EOZ 3<<<\$(base64 -d <<<"\${$p}") 2>/dev/null |grep -x '.*'
@@ -76,7 +76,7 @@ EOF
 # unsafe: password visible on process table during decrypt
 function encvarcache2
 {
-    read -s -p 'Secret value: ' secret; echo >&2
+    read -s -p "$icon"'Secret value: ' secret; echo >&2
     cat - <<EOF
 $cachepass
 $1=\$($ossldec -pass pass:\$(base64 -d <<<"\${$p}") <<EOZ 2>/dev/null |grep -x '.*'
@@ -88,7 +88,7 @@ EOF
 
 function encvarkey
 {
-    read -s -p 'Secret value: ' secret; echo >&2
+    read -s -p "$icon"'Secret value: ' secret; echo >&2
     cat - <<EOF
 $1=\$($ossldeckey |grep -x '.*'
 $($osslenc -pass fd:3 <<<"$secret" 3<<<"$signpass" 2>/dev/null)
@@ -183,6 +183,8 @@ osslenc='openssl enc -aes256 -md sha512 -salt -a'
 ossldec='openssl enc -aes256 -md sha512 -a -d'
 opt=$1
 shift
+sshkey=~/.ssh/id_rsa.pub
+[[ "$1" = -f ]] && sshkey=$2 && shift 2
 [[ $opt != -t* ]] && p=$2 || p='' 
 : ${p:=__$(sed 's/[-]//g' /proc/sys/kernel/random/uuid 2>/dev/null)}
 : ${p:=__$(uuidgen 2>/dev/null|sed 's/[-]//g' /proc/sys/kernel/random/uuid)}
@@ -194,11 +196,11 @@ cachepass=': ${'$p$':=$(bash -c \'read -s -p "'$icon$'Password: " p;echo >&2;ech
 bashexec='| bash -s "$@"'
 tarexec='| tar xzvf - "$@"'
 pipecmd=''
-
-sshkey=~/.ssh/id_rsa.pub
-[[ $opt = -?k* ]] && signpass=$(ssh-keygen -Y sign -f $sshkey -n file - <<<$uuid 2>/dev/null |tr -d '\n')
-
-ossldeckey="$ossldec -pass fd:3 <<EOZ 3<<<\$(ssh-keygen -Y sign -f '$sshkey' -n file - <<<'$uuid' 2>/dev/null |tr -d '\n') 2>/dev/null"
+[[ $opt = -?k* ]] && {
+    [ ! -f "$sshkey" ] && echo "Error: Cannot find key $sshkey" && exit 1
+    signpass=$(ssh-keygen -Y sign -f $sshkey -n file - <<<$uuid 2>/dev/null |tr -d '\n')
+    ossldeckey="$ossldec -pass fd:3 <<EOZ 3<<<\$(eval ssh-keygen -Y sign -f \$([ -f '$sshkey' ] && echo '$sshkey' || echo '<(ssh-add -L 2>/dev/null|head -n 1)') -n file - <<<'$uuid' 2>/dev/null |tr -d '\n') 2>/dev/null"
+}
 
 case "$opt" in
     -v) encvar "$@";;
