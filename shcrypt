@@ -91,23 +91,24 @@ shift
 sshkey=~/.ssh/id_rsa.pub
 [[ "$1" = -f ]] && sshkey=$2 && shift 2
 [[ $opt != -z* ]] && p=$2 || p='' 
+[[ $opt = -[cd]k ]] && p=${2:-fixed_uuid}
 : ${p:=$(sed 's/[-]//g' /proc/sys/kernel/random/uuid 2>/dev/null)}
-: ${p:=$(uuidgen 2>/dev/null|sed 's/[-]//g' /proc/sys/kernel/random/uuid)}
+: ${p:=$(uuidgen 2>/dev/null|sed 's/[-]//g')}
 : ${p:=shc_$RANDOM}
 uuid="$p"
 p="__$p"'[$$]'
 icon='🔐' # :\U1F510
 cachepass=': ${'$p$':=$(bash -c \'read -s -p "'$icon$'Password: " p;echo >&2;echo "$p"\'|base64)}'
-bashexec='| bash -s "$@"'
-tarexec='| tar xzvf - "$@"'
 pipecmd=''
 case $opt in
 -?) cachepass="";;
 -?k)
     [ ! -f "$sshkey" ] && echo "Error: Cannot find ssh key $sshkey" && exit 1
-    signpass=$(ssh-keygen -Y sign -f $sshkey -n file - <<<$uuid 2>/dev/null |tr -d '\n')
-    ossldec="$ossldec -pass fd:3 3<<<\$(eval ssh-keygen -Y sign -f \$([ -f '$sshkey' ] && echo '$sshkey' || echo '<(ssh-add -L 2>/dev/null|head -n 1)') -n file - <<<'$uuid' 2>/dev/null |tr -d '\n') 2>/dev/null"
-    osslenc="$osslenc -pass fd:3 3<<<\"$signpass\""
+    signpass=$(ssh-keygen -Y sign -f $sshkey -n file - <<<$uuid 2>/dev/null |awk 'NR>1' ORS='')
+    [ ! "$signpass" ] && echo "Cannot sign with ssh key, openssh version ?" && exit 1
+    sign="\$([ -f '$sshkey' ] && echo '$sshkey' || echo '<(ssh-add -L 2>/dev/null|head -n 1)')"
+    ossldec="$ossldec -pass fd:3 3<<<\$(eval ssh-keygen -Y sign -f $sign -n file - <<<'$uuid' 2>/dev/null |awk 'NR>1' ORS='') 2>/dev/null"
+    osslenc="$osslenc -pass fd:3 3<<<'$signpass' 2>/dev/null"
     cachepass=""
     ;;
 -?c)
@@ -117,11 +118,14 @@ case $opt in
     ossldec="$ossldec -pass pass:\$(base64 -d <<<\${$p}) <<EOZ 2>/dev/null"
     ;;
 esac
+
 case "$opt" in
+    -c*) cat $1 |eval $osslenc;;
+    -d*) cat $1 |eval $ossldec;;
     -v*) encvar "$@";;
     -s*) encsh "$@";;
     -t*) enctext "$@";;
-    -b*) pipecmd="$bashexec"; enctext "$@";;
-    -z*) pipecmd="$tarexec"; tar czf - "$@" |enctext;;
+    -b*) pipecmd='| bash -s "$@"'; enctext "$@";;
+    -z*) pipecmd='| tar xzvf - "$@"'; tar czf - "$@" |enctext;;
     *) usage;
 esac
