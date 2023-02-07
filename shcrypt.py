@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import sys
+import argparse
 from subprocess import run, PIPE, DEVNULL
 from textwrap import dedent
 from uuid import uuid4
@@ -18,7 +19,7 @@ def crypt(data, password=None):
         return False
     return runsh.stdout
 
-def cryptas(data, mode='shellout', pwmode='passwd', password=None, passvar=None, varname=None, sshkey=None):
+def cryptas(data, mode='shellout', pwmode='passwd', passvar=None, varname=None, sshkey=None, password=None):
     sshkey = os.path.expanduser('~') + '/.ssh/id_rsa'
     passvar = passvar or uuid4().hex
     sshkeyfind = f"$([ -f '{sshkey}' ] && echo '{sshkey}' || echo '<(ssh-add -L 2>/dev/null|head -n 1)')"
@@ -38,12 +39,12 @@ def cryptas(data, mode='shellout', pwmode='passwd', password=None, passvar=None,
     failmsg = "echo 'Error: Failed to decrypt' >&2"
     pwmodes = {
         'passwd': {'bashpass':'', 'osslpass': '', 'unset': ':' },
-        'cachepw': {
+        'pwcache': {
             'bashpass': bashpass, 
             'osslpass': f'-pass fd:3 3<<<$(base64 -d <<<"${{{passvar}}}")',
             'unset': f'unset {passvar}',
         },
-        'cachepw2': {
+        'pwcache2': {
             'bashpass': bashpass, 
             'osslpass': f'-pass pass:$(base64 -d <<<"${{{passvar}}}")',
             'unset': f'unset {passvar}',
@@ -83,7 +84,18 @@ def cryptas(data, mode='shellout', pwmode='passwd', password=None, passvar=None,
     return shell
 
 
-tocrypt = sys.stdin.read()
-#print(crypt(tocrypt))
-print(cryptas(tocrypt, 'shellenv', 'sshsign'))
-
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-m", "--mode", default='shellenv', help="output mode",
+                        choices=['raw', 'shellenv', 'shellvar', 'shellout'])
+    parser.add_argument("-p", "--pwmode", default='pwcache', help="password mode",
+                        choices=['password', 'pwcache', 'sshsign', 'pwcache2'])
+    parser.add_argument("-v", "--var", required=False, help="variable name (shvar)")
+    parser.add_argument("-k", "--key", required=False, help="sshkey to get signature password (sshsign)")
+    parser.add_argument("-c", "--cachevar", required=False, help="password cache variable")
+    args = parser.parse_args()
+    tocrypt = sys.stdin.read()
+    if args.mode == 'raw':
+        print(crypt(tocrypt))
+        sys.exit(0)
+    print(cryptas(tocrypt, args.mode, args.pwmode, args.cachevar, args.var, args.key))
