@@ -55,10 +55,10 @@ function encvar
     read -s -p "$icon"'Secret : ' secret; echo '' >&2
     cat - <<EOF
 $cachepass
-$1=\$($ossldec <<EOZ 2>/dev/null |grep -x '.*'
+$1=\$($ossldec <<'EOZ' 2>/dev/null |grep -x '.*'
 $(eval $osslenc <<<"$secret" 2>/dev/null)
 EOZ
-) ||{ echo 'ERROR: Decrypt failed' >&2; }
+) ||{ echo 'ERROR: Decrypt failed' >&2; unset $p; }
 EOF
 }
 
@@ -66,10 +66,10 @@ function encsh
 {
     cat $1 <<EOF
 $cachepass
-eval \$($ossldec <<EOZ 2>/dev/null |grep -x '.*'
+. <($ossldec <<'EOZ' 2>/dev/null |grep -x '.*' || { echo 'ERROR: Decrypt failed' >&2; echo unset $p; }
 $(eval $osslenc 2>/dev/null)
 EOZ
-) ||{ echo 'ERROR: Decrypt failed' >&2; }
+)
 EOF
 }
 
@@ -77,7 +77,7 @@ function enctext
 {
     cat $1 <<EOF
 $cachepass
-$ossldec <<EOZ 2>/dev/null $pipecmd||{ echo 'ERROR: Decrypt failed' >&2; }
+$ossldec <<'EOZ' 2>/dev/null $pipecmd||{ echo 'ERROR: Decrypt failed' >&2; unset $p; }
 $(eval $osslenc 2>/dev/null)
 EOZ
 EOF
