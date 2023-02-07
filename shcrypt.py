@@ -5,6 +5,7 @@ import argparse
 from subprocess import run, PIPE, DEVNULL
 from textwrap import dedent
 from uuid import uuid4
+from getpass import getpass
 
 ossl = 'openssl enc -aes256 -md sha512 -a'
 
@@ -19,20 +20,31 @@ def crypt(data, password=None):
         return False
     return runsh.stdout
 
+def decrypt(data):
+    password = getpass('🔐 Password: ')
+    runsh = run(f"{ossl} -d -pass fd:3 3<<<'{password}'", shell=True, input=data, stdout=PIPE,
+                stderr=DEVNULL, encoding='utf-8', check=False, executable='/bin/bash')
+    if runsh.returncode != 0:
+        print('Error: Failed to decrypt', file=sys.stderr)
+        return False
+    return runsh.stdout
+
+def sshsign(sshkey=None, signtext='constant_sign'):
+    sshkey = sshkey or os.path.expanduser('~') + '/.ssh/id_rsa'
+    runsh = run(f"ssh-keygen -Y sign -f '{sshkey}' -n file - <<<'{signtext}'", stdout=PIPE, 
+                stderr=DEVNULL, encoding='utf-8', check=False, shell=True, executable='/bin/bash')
+    if runsh.returncode != 0:
+        print('Error: Failed to get ssh signature (openssl version ?)', file=sys.stderr)
+        return False
+    return ''.join(runsh.stdout.strip().split('\n')[1:])
+
 def cryptas(data, mode='shellout', pwmode='passwd', passvar=None, varname=None, sshkey=None, password=None):
-    sshkey = os.path.expanduser('~') + '/.ssh/id_rsa'
+    sshkey = sshkey or os.path.expanduser('~') + '/.ssh/id_rsa'
     passvar = passvar or uuid4().hex
     sshkeyfind = f"$([ -f '{sshkey}' ] && echo '{sshkey}' || echo '<(ssh-add -L 2>/dev/null|head -n 1)')"
     signwithkey= f"$(ssh-keygen -Y sign -f {sshkeyfind} -n file - <<<'{passvar}' 2>/dev/null |awk 'NR>1' ORS='')"
     if pwmode == 'sshsign':
-        runsh = run(f"ssh-keygen -Y sign -f '{sshkey}' -n file - <<<'{passvar}'", stdout=PIPE, 
-                    stderr=DEVNULL, encoding='utf-8', check=False, shell=True, executable='/bin/bash')
-        if runsh.returncode != 0:
-            print('Error: Failed to get ssh signature (openssl version ?)', file=sys.stder)
-            return False
-        password = ''.join(runsh.stdout.strip().split('\n')[1:])
-        #print(password)
-
+        password = sshsign(sshkey, passvar)
     crypted = crypt(data, password)
     passvar = f'__{passvar}[$$]'
     bashpass = f''': ${{{passvar}:=$(bash -c 'read -s -p "🔐 Password: " p;echo >&2;echo "$p"'|base64)}}'''
@@ -93,9 +105,19 @@ if __name__ == '__main__':
     parser.add_argument("-v", "--var", required=False, help="variable name (shvar)")
     parser.add_argument("-k", "--key", required=False, help="sshkey to get signature password (sshsign)")
     parser.add_argument("-c", "--cachevar", required=False, help="password cache variable")
+    parser.add_argument("-d", "--decrypt", default=False, action='store_true', help='decrypt raw')
     args = parser.parse_args()
-    tocrypt = sys.stdin.read()
-    if args.mode == 'raw':
-        print(crypt(tocrypt))
+    
+    indata = sys.stdin.read()
+
+    if args.decrypt:
+        print(decrypt(indata))
         sys.exit(0)
-    print(cryptas(tocrypt, args.mode, args.pwmode, args.cachevar, args.var, args.key))
+
+    if args.mode == 'raw':
+        if args.pwmode == 'sshsign':
+            print(crypt(indata, sshsign(args.key, 'constant_sign')))
+        else:
+            print(crypt(indata))
+        sys.exit(0)
+    print(cryptas(indata, args.mode, args.pwmode, args.cachevar, args.var, args.key))
