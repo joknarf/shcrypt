@@ -20,8 +20,8 @@ def crypt(data, password=None):
         return False
     return runsh.stdout
 
-def decrypt(data):
-    password = getpass('🔐 Password: ')
+def decrypt(data, password=None):    
+    password = password or getpass('🔐 Password: ')
     runsh = run(f"{ossl} -d -pass fd:3 3<<<'{password}'", shell=True, input=data, stdout=PIPE,
                 stderr=DEVNULL, encoding='utf-8', check=False, executable='/bin/bash')
     if runsh.returncode != 0:
@@ -86,12 +86,12 @@ def cryptas(data, mode='shellout', pwmode='passwd', passvar=None, varname=None, 
         }
     }
     mod = modes[mode]
-    shell = dedent("""
+    shell = dedent("""\
         {bashpass}
         {preossl}{ossl} -d {osslpass} <<'EOZ' 2>/dev/null {postossl}
         {crypted}
         EOZ
-        {postcrypt}
+        {postcrypt}\
     """).format(ossl=ossl, crypted=crypted, **mod, **pwm)
     return shell
 
@@ -108,15 +108,18 @@ if __name__ == '__main__':
     parser.add_argument("-d", "--decrypt", default=False, action='store_true', help='decrypt raw')
     args = parser.parse_args()
     
-    indata = sys.stdin.read()
-
+    indata = sys.stdin.read()[0:-1]
+    #print(indata, file=sys.stderr)
     if args.decrypt:
-        print(decrypt(indata))
+        if args.pwmode == 'sshsign':
+            print(decrypt(indata, sshsign(args.key)))
+        else:
+            print(decrypt(indata))
         sys.exit(0)
 
     if args.mode == 'raw':
         if args.pwmode == 'sshsign':
-            print(crypt(indata, sshsign(args.key, 'constant_sign')))
+            print(crypt(indata, sshsign(args.key)))
         else:
             print(crypt(indata))
         sys.exit(0)
