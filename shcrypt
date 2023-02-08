@@ -52,82 +52,35 @@ EOF
 
 function encvar
 {
-    read -s -p 'Secret : ' secret
-    echo '' >&2
-    echo "$1="'$('$ossldec' <<EOZ 2>/dev/null'"|grep -x '.*'
-$($osslenc <<<"$secret" 2>/dev/null)
+    read -s -p "$icon"'Secret : ' secret; echo '' >&2
+    cat - <<EOF
+$cachepass
+$1=\$($ossldec <<'EOZ' 2>/dev/null |grep -x '.*'
+$(eval $osslenc <<<"$secret" 2>/dev/null)
 EOZ
-) ||{ echo 'ERROR: Decrypt failed' >&2; }"
-}
-
-function encvarcache
-{
-    read -s -p 'Secret value: ' secret; echo >&2
-    echo "$cachepass
-$1="'$('$ossldec' -pass fd:3 <<EOZ 3<<<$(base64 -d <<<"${'$p'}") 2>/dev/null'"|grep -x '.*'
-$($osslenc <<<"$secret" 2>/dev/null)
-EOZ
-) ||{ echo 'ERROR: Decrypt failed' >&2;unset $p; }"
-}
-
-# unsafe: password visible on process table during decrypt
-function encvarcache2
-{
-    read -s -p 'Secret value: ' secret; echo >&2
-    echo "$cachepass
-$1="'$('$ossldec' -pass pass:$(base64 -d <<<"${'$p'}") <<EOZ 2>/dev/null'"|grep -x '.*'
-$($osslenc <<<"$secret" 2>/dev/null)
-EOZ
-) ||{ echo 'ERROR: Decrypt failed' >&2;unset $p; }"
+) ||{ echo 'ERROR: Decrypt failed' >&2; unset $p; }
+EOF
 }
 
 function encsh
 {
-    echo 'eval $('$ossldec' <<EOZ 2>/dev/null'"|grep -x '.*'
-$($osslenc -in ${1:--} 2>/dev/null)
+    cat $1 <<EOF
+$cachepass
+. <($ossldec <<'EOZ' 2>/dev/null |grep -x '.*' || { echo 'ERROR: Decrypt failed' >&2; echo unset $p; }
+$(eval $osslenc 2>/dev/null)
 EOZ
-) ||{ echo 'ERROR: Decrypt failed' >&2; }"
-}
-
-function encshcache
-{
-    echo "$cachepass"'
-eval $('$ossldec' -pass fd:3 <<EOZ 3<<<$(base64 -d <<<"${'$p'}") 2>/dev/null'"|grep -x '.*'
-$($osslenc -in ${1:--} 2>/dev/null)
-EOZ
-) ||{ echo 'ERROR: Decrypt failed' >&2;unset $p; }"
-}
-
-function encshcache2
-{
-    echo "$cachepass"'
-eval $('$ossldec' -pass pass:$(base64 -d <<<"${'$p'}") <<EOZ 2>/dev/null'"|grep -x '.*'
-$($osslenc -in ${1:--} 2>/dev/null)
-EOZ
-) ||{ echo 'ERROR: Decrypt failed' >&2;unset $p; }"
+)
+EOF
 }
 
 function enctext
 {
-    echo "$ossldec <<EOZ 2>/dev/null $pipecmd||{ echo 'ERROR: Decrypt failed' >&2; }
-$($osslenc -in ${1:--} 2>/dev/null)
-EOZ"
-}
-
-function enctextcache
-{
-    echo "$cachepass
-$ossldec"' -pass fd:3 <<EOZ 3<<<$(base64 -d <<<"${'$p'}") 2>/dev/null'" $pipecmd||{ echo 'ERROR: Decrypt failed' >&2;unset $p; }
-$($osslenc -in ${1:--} 2>/dev/null)
-EOZ"
-}
-
-function enctextcache2
-{
-    echo "$cachepass
-$ossldec"' -pass pass:$(base64 -d <<<"${'$p'}") <<EOZ 2>/dev/null'" $pipecmd||{ echo 'ERROR: Decrypt failed' >&2;unset $p; }
-$($osslenc -in ${1:--} 2>/dev/null)
-EOZ"
+    cat $1 <<EOF
+$cachepass
+$ossldec <<'EOZ' 2>/dev/null $pipecmd||{ echo 'ERROR: Decrypt failed' >&2; unset $p; }
+$(eval $osslenc 2>/dev/null)
+EOZ
+EOF
 }
 
 PATH='/bin:/usr/bin'
@@ -135,32 +88,44 @@ osslenc='openssl enc -aes256 -md sha512 -salt -a'
 ossldec='openssl enc -aes256 -md sha512 -a -d'
 opt=$1
 shift
-[[ $opt != -t* ]] && p=$2 || p='' 
-: ${p:=__$(sed 's/[-]//g' /proc/sys/kernel/random/uuid 2>/dev/null)}
-: ${p:=__$(uuidgen 2>/dev/null|sed 's/[-]//g' /proc/sys/kernel/random/uuid)}
-: ${p:=__shc_$RANDOM}
-p="$p"'[$$]'
+sshkey=~/.ssh/id_rsa.pub
+[[ "$1" = -f ]] && sshkey=$2 && shift 2
+[[ $opt != -z* ]] && p=$2 || p='' 
+[[ $opt = -[cd]k ]] && p=${2:-fixed_uuid}
+: ${p:=$(sed 's/[-]//g' /proc/sys/kernel/random/uuid 2>/dev/null)}
+: ${p:=$(uuidgen 2>/dev/null|sed 's/[-]//g')}
+: ${p:=shc_$RANDOM}
+uuid="$p"
+p="__$p"'[$$]'
 icon='🔐' # :\U1F510
 cachepass=': ${'$p$':=$(bash -c \'read -s -p "'$icon$'Password: " p;echo >&2;echo "$p"\'|base64)}'
-bashexec='| bash -s "$@"'
-tarexec='| tar xzvf - "$@"'
 pipecmd=''
+case $opt in
+-?) cachepass="";;
+-?k)
+    [ ! -f "$sshkey" ] && echo "Error: Cannot find ssh key $sshkey" && exit 1
+    signpass=$(ssh-keygen -Y sign -f $sshkey -n file - <<<$uuid 2>/dev/null |awk 'NR>1' ORS='')
+    [ ! "$signpass" ] && echo "Cannot sign with ssh key, openssh version ?" && exit 1
+    sign="\$([ -f '$sshkey' ] && echo '$sshkey' || echo '<(ssh-add -L 2>/dev/null|head -n 1)')"
+    ossldec="$ossldec -pass fd:3 3<<<\$(eval ssh-keygen -Y sign -f $sign -n file - <<<'$uuid' 2>/dev/null |awk 'NR>1' ORS='') 2>/dev/null"
+    osslenc="$osslenc -pass fd:3 3<<<'$signpass' 2>/dev/null"
+    cachepass=""
+    ;;
+-?c)
+    ossldec="$ossldec -pass fd:3 3<<<\$(base64 -d <<<"\${$p}") 2>/dev/null"
+    ;;
+-?cu)
+    ossldec="$ossldec -pass pass:\$(base64 -d <<<\${$p}) <<EOZ 2>/dev/null"
+    ;;
+esac
 
 case "$opt" in
-    -v) encvar "$@";;
-    -vc) encvarcache "$@";;
-    -vcu) encvarcache2 "$@";;
-    -s) encsh "$@";;
-    -sc) encshcache "$@";;
-    -scu) encshcache2 "$@";;
-    -t) enctext "$@";;
-    -tc) enctextcache "$@";;
-    -tcu) enctextcache2 "$@";;
-    -b) pipecmd="$bashexec"; enctext "$@";;
-    -bc) pipecmd="$bashexec"; enctextcache "$@";;
-    -bcu) pipecmd="$bashexec"; enctextcache2 "$@";;
-    -z) pipecmd="$tarexec"; tar czf - "$@" |enctext;;
-    -zc) pipecmd="$tarexec"; tar czf - "$@" |enctextcache;;
-    -zcu) pipecmd="$tarexec"; tar czf - "$@" |enctextcache2;;
+    -c*) cat $1 |eval $osslenc;;
+    -d*) cat $1 |eval $ossldec;;
+    -v*) encvar "$@";;
+    -s*) encsh "$@";;
+    -t*) enctext "$@";;
+    -b*) pipecmd='| bash -s "$@"'; enctext "$@";;
+    -z*) pipecmd='| tar xzvf - "$@"'; tar czf - "$@" |enctext;;
     *) usage;
 esac
