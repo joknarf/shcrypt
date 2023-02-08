@@ -18,7 +18,7 @@ def crypt(data, password=None):
     if runsh.returncode != 0:
         print('Error: Failed to encrypt', file=sys.stderr)
         return False
-    return runsh.stdout
+    return runsh.stdout[:-1] if runsh.stdout.endswith('\n') else runsh.stdout
 
 def decrypt(data, password=None):    
     password = password or getpass('🔐 Password: ')
@@ -27,7 +27,7 @@ def decrypt(data, password=None):
     if runsh.returncode != 0:
         print('Error: Failed to decrypt', file=sys.stderr)
         return False
-    return runsh.stdout
+    return runsh.stdout[:-1] if runsh.stdout.endswith('\n') else runsh.stdout
 
 def sshsign(sshkey=None, signtext='constant_sign'):
     sshkey = sshkey or os.path.expanduser('~') + '/.ssh/id_rsa'
@@ -106,10 +106,19 @@ if __name__ == '__main__':
     parser.add_argument("-k", "--key", required=False, help="sshkey to get signature password (sshsign)")
     parser.add_argument("-c", "--cachevar", required=False, help="password cache variable")
     parser.add_argument("-d", "--decrypt", default=False, action='store_true', help='decrypt raw')
+    parser.add_argument("-i", "--interactive", default=False, action='store_true', help='Get secret from console')
     args = parser.parse_args()
     
-    indata = sys.stdin.read()[0:-1]
-    #print(indata, file=sys.stderr)
+    if args.interactive:
+        indata = getpass('🔐 Secret: ')
+    else:
+        indata = sys.stdin.read()
+        if indata.endswith('\n'):
+            indata = indata[:-1]
+    
+    if args.var:
+        args.mode = 'shellvar'
+
     if args.decrypt:
         if args.pwmode == 'sshsign':
             print(decrypt(indata, sshsign(args.key)))
