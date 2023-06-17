@@ -35,8 +35,8 @@ def decrypt(data, password=None):
 
 def sshsign(sshkey=None, signtext='constant_sign'):
     """ ssh signature using sshkey """
-    sshkey = sshkey or os.path.expanduser('~') + '/.ssh/id_rsa'
-    runsh = run(f"ssh-keygen -Y sign -f '{sshkey}' -n file - <<<'{signtext}'", stdout=PIPE,
+    sshkey = sshkey or '~/.ssh/id_rsa'
+    runsh = run(f"ssh-keygen -Y sign -f {sshkey} -n file - <<<'{signtext}'", stdout=PIPE,
                 stderr=DEVNULL, encoding='utf-8', check=False, shell=True, executable='/bin/bash')
     if runsh.returncode != 0:
         print('Error: Failed to get ssh signature (openssl version ?)', file=sys.stderr)
@@ -46,10 +46,10 @@ def sshsign(sshkey=None, signtext='constant_sign'):
 def cryptas(data, mode='shellout', pwmode='passwd', passvar=None,
             varname=None, sshkey=None, password=None):
     """ crypt data to shell auto-decrypt """
-    sshkey = sshkey or os.path.expanduser('~') + '/.ssh/id_rsa'
+    sshkey = sshkey or '~/.ssh/id_rsa'
     passvar = passvar or uuid4().hex
-    sshkeyfind = f"$([ -f '{sshkey}' ] && echo '{sshkey}' || echo '<(ssh-add -L 2>/dev/null|head -n 1)')"
-    signwithkey= f"$(ssh-keygen -Y sign -f {sshkeyfind} -n file - <<<'{passvar}' 2>/dev/null |awk 'NR>1' ORS='')"
+    sshkeyfind = f"$([ -f {sshkey} ] && echo '{sshkey}' || echo '<(ssh-add -L 2>/dev/null|head -n 1)')"
+    signwithkey= f"$(eval ssh-keygen -Y sign -f {sshkeyfind} -n file - <<<'{passvar}' 2>/dev/null |awk '!/---/' ORS='')"
     if pwmode == 'sshsign':
         password = sshsign(sshkey, passvar)
     crypted = crypt(data, password)
