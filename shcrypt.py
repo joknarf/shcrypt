@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 # pylint: disable=C0301,R0913,R0914
 """ openssl encrypt to autodecrypt shell/raw """
-import os
 import sys
 import argparse
 from subprocess import run, PIPE, DEVNULL
 from textwrap import dedent
 from uuid import uuid4
-from getpass import getpass
+try:
+    from pwinput import pwinput
+except ModuleNotFoundError:
+    from getpass import getpass as pwinput
 
 OSSL = 'openssl enc -aes256 -md sha512 -a'
 
@@ -25,7 +27,7 @@ def crypt(data, password=None):
 
 def decrypt(data, password=None):
     """ decrypt data """
-    password = password or getpass('🔐 Password: ')
+    password = password or pwinput('🔐 Password: ')
     runsh = run(f"{OSSL} -d -pass fd:3 3<<<'{password}'", shell=True, input=data, stdout=PIPE,
                 stderr=DEVNULL, encoding='utf-8', check=False, executable='/bin/bash')
     if runsh.returncode != 0:
@@ -41,7 +43,7 @@ def sshsign(sshkey=None, signtext='constant_sign'):
     if runsh.returncode != 0:
         print('Error: Failed to get ssh signature (openssl version ?)', file=sys.stderr)
         return False
-    return ''.join(runsh.stdout.strip().split('\n')[1:])
+    return ''.join([s for s in runsh.stdout.strip().split('\n') if '---' not in s])
 
 def cryptas(data, mode='shellout', pwmode='passwd', passvar=None,
             varname=None, sshkey=None, password=None):
@@ -113,11 +115,14 @@ if __name__ == '__main__':
     parser.add_argument("-k", "--key", required=False, help="sshkey to get signature password (sshsign)")
     parser.add_argument("-c", "--cachevar", required=False, help="password cache variable")
     parser.add_argument("-d", "--decrypt", default=False, action='store_true', help='decrypt raw')
-    parser.add_argument("-i", "--interactive", default=False, action='store_true', help='Get secret from console')
+    parser.add_argument("-i", "--interactive", default=False, action='store_true', help='Get secret from console (1 line only)')
     args = parser.parse_args()
 
-    if sys.stdin.isatty() and args.var :
-        indata = getpass('🔐 Secret: ')
+    if sys.stdin.isatty() and args.interactive :
+        stdout = sys.stdout
+        sys.stdout = sys.stderr
+        indata = pwinput('🔐 Secret: ')
+        sys.stdout = stdout
     else:
         indata = sys.stdin.read()
 
