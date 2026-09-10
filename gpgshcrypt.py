@@ -11,14 +11,14 @@ try:
 except ModuleNotFoundError:
     from getpass import getpass as pwinput
 
-GPG = 'gpg --no-default-keyring --no-options --batch --yes --cipher-algo AES256'
+GPG = 'gpg --quiet --no-default-keyring --no-options --batch --yes --cipher-algo AES256'
 
 def crypt(data, password=None):
     """ crypt data """
     gpgenc = f'{GPG} -c'
     if password:
         gpgenc += f" --passphrase-fd 3 3<<<'{password}' |base64"
-    print(gpgenc, file=sys.stderr)
+    #print(gpgenc, file=sys.stderr)
     runsh = run(gpgenc, input=data, stdout=PIPE, shell=True,
                 stderr=DEVNULL, encoding='utf-8', check=False, executable='/bin/bash')
     if runsh.returncode != 0:
@@ -59,7 +59,7 @@ def cryptas(data, mode='shellout', pwmode='passwd', passvar=None,
         password = sshsign(sshkey, passvar)
     else:
         password = password or pwinput('🔐 Password: ')
-    print(password, file=sys.stderr)
+    #print(password, file=sys.stderr)
     crypted = crypt(data, password)
     passvar = f'__{passvar}[$$]'
     bashpass = f''': ${{{passvar}:=$(bash -c 'read -s -p "🔐 Password: " p;echo >&2;echo "$p"'|base64)}}'''
@@ -108,8 +108,9 @@ def cryptas(data, mode='shellout', pwmode='passwd', passvar=None,
         EOZ
         {postcrypt}
     """).format(gpg=GPG, crypted=crypted, **mod, **pwm)
-    return shell
-
+    b64shell = run("base64", shell=True, input=shell, stdout=PIPE, stderr=DEVNULL, encoding='utf-8', check=False, executable='/bin/bash').stdout
+    shell2 = f". <(base64 -d <<<'{b64shell}')"
+    return shell2
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -122,6 +123,7 @@ if __name__ == '__main__':
     parser.add_argument("-c", "--cachevar", required=False, help="password cache variable")
     parser.add_argument("-d", "--decrypt", default=False, action='store_true', help='decrypt raw')
     parser.add_argument("-i", "--interactive", default=False, action='store_true', help='Get secret from console (1 line only)')
+    parser.add_argument("-P", "--passfile", help="file containing the password")
     args = parser.parse_args()
 
     if sys.stdin.isatty() and args.interactive :
@@ -134,6 +136,10 @@ if __name__ == '__main__':
 
     if args.var:
         args.mode = 'shellvar'
+
+    if args.passfile:
+        with open(args.passfile, 'r') as f:
+            password = f.read().strip()
 
     if args.decrypt:
         if args.pwmode == 'sshsign':
@@ -148,4 +154,4 @@ if __name__ == '__main__':
         else:
             sys.stdout.write(crypt(indata))
         sys.exit(0)
-    sys.stdout.write(cryptas(indata, args.mode, args.pwmode, args.cachevar, args.var, args.key))
+    sys.stdout.write(cryptas(indata, args.mode, args.pwmode, args.cachevar, args.var, args.key, password))
