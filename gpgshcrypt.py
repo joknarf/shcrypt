@@ -103,9 +103,7 @@ def cryptas(data, mode='shellout', pwmode='passwd', passvar=None,
     mod = modes[mode]
     shell = dedent("""\
         {bashpass}
-        {pregpg}base64 -d <<'EOZ' | {gpg} -d {gpgpass} {postgpg}
-        {crypted}
-        EOZ
+        {pregpg}{gpg} -d {gpgpass} < <(base64 -d <<<'{crypted}') {postgpg} 
         {postcrypt}
     """).format(gpg=GPG, crypted=crypted, **mod, **pwm)
     b64shell = run("base64", shell=True, input=shell, stdout=PIPE, stderr=DEVNULL, encoding='utf-8', check=False, executable='/bin/bash').stdout
