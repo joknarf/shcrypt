@@ -54,7 +54,7 @@ def cryptas(data, mode='shellout', pwmode='passwd', passvar=None,
     sshkey = sshkey or '~/.ssh/id_rsa'
     passvar = passvar or uuid4().hex
     sshkeyfind = f"$([ -f {sshkey} ] && echo '{sshkey}' || echo '<(ssh-add -L 2>/dev/null|head -n 1)')"
-    signwithkey= f"$(eval ssh-keygen -Y sign -f {sshkeyfind} -n file - <<<'{passvar}' 2>/dev/null |awk '!/---/' ORS='')"
+    signwithkey= f"eval ssh-keygen -Y sign -f {sshkeyfind} -n file - <<<'{passvar}' 2>/dev/null |awk '!/---/' ORS=''"
     if pwmode == 'sshsign':
         password = sshsign(sshkey, passvar)
     else:
@@ -68,7 +68,7 @@ def cryptas(data, mode='shellout', pwmode='passwd', passvar=None,
         'passwd': {'bashpass':'', 'gpgpass': '', 'unset': ':' },
         'pwcache': {
             'bashpass': bashpass,
-            'gpgpass': f'--passphrase-fd 3 3<<<$(base64 -d <<<"${{{passvar}}}")',
+            'gpgpass': f'--passphrase-fd 3 3< <(base64 -d <<<"${{{passvar}}}")',
             'unset': f'unset {passvar}',
         },
         'pwcache2': {
@@ -78,7 +78,7 @@ def cryptas(data, mode='shellout', pwmode='passwd', passvar=None,
         },
         'sshsign': {
             'bashpass': '',
-            'gpgpass': f"--passphrase-fd 3 3<<<{signwithkey}",
+            'gpgpass': f"--passphrase-fd 3 3< <({signwithkey})",
             'unset': ':',
         }
     }
@@ -86,17 +86,17 @@ def cryptas(data, mode='shellout', pwmode='passwd', passvar=None,
     modes = {
         'shellenv': {
             'pregpg': '. <(',
-            'postgpg': f"|grep -x '.*' || {{ {failmsg}; echo '{pwm['unset']};return 1'; }}",
+            'postgpg': f" 2>/dev/null|grep -x '.*' || {{ {failmsg}; echo '{pwm['unset']};return 1'; }}",
             'postcrypt': ')',
         },
         'shellvar': {
             'pregpg': f'{varname}=$(',
-            'postgpg': "|grep -x '.*'",
+            'postgpg': " 2>/dev/null|grep -x '.*'",
             'postcrypt': f") || {{ {failmsg};{pwm['unset']}; }}"
         },
         'shellout': {
             'pregpg': '',
-            'postgpg': f"|grep -x '.*' || {{ {failmsg};{pwm['unset']}; }}",
+            'postgpg': f" 2>/dev/null|grep -x '.*' || {{ {failmsg};{pwm['unset']}; }}",
             'postcrypt': ""
         }
     }
