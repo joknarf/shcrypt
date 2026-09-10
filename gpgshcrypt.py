@@ -40,7 +40,7 @@ def sshsign(sshkey=None, signtext='constant_sign'):
     """ ssh signature using sshkey """
     sshkey = sshkey or '~/.ssh/id_rsa'
     sign = f"ssh-keygen -Y sign -f {sshkey} -n file - <<<'{signtext}'"
-    print(sign, file=sys.stderr)
+    #print(sign, file=sys.stderr)
     runsh = run(sign, stdout=PIPE,
                 stderr=DEVNULL, encoding='utf-8', check=False, shell=True, executable='/bin/bash')
     if runsh.returncode != 0:
@@ -140,6 +140,8 @@ if __name__ == '__main__':
     if args.passfile:
         with open(args.passfile, 'r') as f:
             password = f.read().strip()
+    else:
+        password = None
 
     if args.decrypt:
         if args.pwmode == 'sshsign':
