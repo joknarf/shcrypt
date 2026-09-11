@@ -11,13 +11,13 @@ try:
 except ModuleNotFoundError:
     from getpass import getpass as pwinput
 
-GPG = 'gpg --quiet --no-default-keyring --no-options --batch --yes --cipher-algo AES256'
+GPG = 'gpg --armor --quiet --no-default-keyring --no-options --batch --yes --cipher-algo AES256'
 
 def crypt(data, password=None):
     """ crypt data """
     gpgenc = f'{GPG} -c'
     if password:
-        gpgenc += f" --passphrase-fd 3 3<<<'{password}' |base64"
+        gpgenc += f" --passphrase-fd 3 3<<<'{password}'"
     #print(gpgenc, file=sys.stderr)
     runsh = run(gpgenc, input=data, stdout=PIPE, shell=True,
                 stderr=DEVNULL, encoding='utf-8', check=False, executable='/bin/bash')
@@ -62,13 +62,13 @@ def cryptas(data, mode='shellout', pwmode='passwd', passvar=None,
     #print(password, file=sys.stderr)
     crypted = crypt(data, password)
     passvar = f'__{passvar}[$$]'
-    bashpass = f''': ${{{passvar}:=$(bash -c 'read -s -p "🔐 Password: " p;echo >&2;echo "$p"'|base64)}}'''
+    bashpass = f''': ${{{passvar}:=$(bash -c 'read -s -p "🔐 Password: " p;echo >&2;base64 <<<"$p"')}}'''
     failmsg = "echo 'Error: Failed to decrypt' >&2"
     pwmodes = {
         'passwd': {'bashpass':'', 'gpgpass': '', 'unset': ':' },
         'pwcache': {
             'bashpass': bashpass,
-            'gpgpass': f'--passphrase-fd 3 3< <(base64 -d <<<"${{{passvar}}}")',
+            'gpgpass': f'--passphrase-file <(base64 -d <<<"${{{passvar}}}")',
             'unset': f'unset {passvar}',
         },
         'pwcache2': {
@@ -78,7 +78,7 @@ def cryptas(data, mode='shellout', pwmode='passwd', passvar=None,
         },
         'sshsign': {
             'bashpass': '',
-            'gpgpass': f"--passphrase-fd 3 3< <({signwithkey})",
+            'gpgpass': f"--passphrase-file <({signwithkey})",
             'unset': ':',
         }
     }
@@ -103,7 +103,7 @@ def cryptas(data, mode='shellout', pwmode='passwd', passvar=None,
     mod = modes[mode]
     shell = dedent("""\
         {bashpass}
-        {pregpg}{gpg} -d {gpgpass} < <(base64 -d <<<'{crypted}') {postgpg} 
+        {pregpg}{gpg} -d {gpgpass} <<<'{crypted}' {postgpg} 
         {postcrypt}
     """).format(gpg=GPG, crypted=crypted, **mod, **pwm)
     b64shell = run("base64", shell=True, input=shell, stdout=PIPE, stderr=DEVNULL, encoding='utf-8', check=False, executable='/bin/bash').stdout
