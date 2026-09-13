@@ -3,19 +3,15 @@
 # Bash translation of the original python3 script.
 #
 # Notes on fidelity to the original:
-#  - Same limitations apply: passwords/data containing single quotes will
+#  - Same limitations apply: passwords containing single quotes will
 #    break the embedded heredocs, exactly as in the python version.
-#  - The CLI's --pwmode choices ("password") do not match the dict keys
-#    used internally ("passwd") in the *original* python either — that
-#    mismatch is preserved here as an explicit error rather than silently
-#    producing broken output.
 #  - Command substitution in bash strips trailing newlines from stdin,
 #    unlike python's sys.stdin.read(); this is an unavoidable minor
 #    difference from a pure-bash translation.
 
 set -o pipefail
 
-GPG='gpg --armor --quiet --no-default-keyring --no-options --batch --yes --cipher-algo AES256 --no-symkey-cache'
+GPG=(gpg --armor --quiet --no-default-keyring --no-options --batch --yes --cipher-algo AES256 --no-symkey-cache)
 
 # --- helpers ---------------------------------------------------------------
 
@@ -43,11 +39,10 @@ uuid_hex() {
 crypt() {
     # crypt <data> [password]  -> prints ciphertext to stdout, returns 1 on failure
     local data="$1" password="${2:-$(pwinput '🔐 Password: ')}"
-    local gpgenc="$GPG -c"
+    local gpgenc=("${GPG[@]}" -c --passphrase-fd 3)
     
-    gpgenc+=" --passphrase-fd 3 3<<<'$password'"
     local out rc
-    out=$(eval "$gpgenc" <<<"$data" 2>/dev/null)
+    out=$("${gpgenc[@]}" 3<<<"$password" <<<"$data" 2>/dev/null)
     rc=$?
     if [[ $rc -ne 0 ]]; then
         echo 'Error: Failed to encrypt' >&2
@@ -60,7 +55,7 @@ decrypt() {
     # decrypt <data> [password]  -> prints plaintext to stdout, returns 1 on failure
     local data="$1" password="${2:-$(pwinput '🔐 Password: ')}"
     local out rc
-    out=$(eval "$GPG -d --passphrase-fd 3 3<<<'$password'" <<<"$data" 2>/dev/null)
+    out=$("${GPG[@]}" -d --passphrase-fd 3 3<<<"$password" <<<"$data" 2>/dev/null)
     rc=$?
     if [[ $rc -ne 0 ]]; then
         echo 'Error: Failed to decrypt' >&2
@@ -160,7 +155,7 @@ cryptas() {
     local shell
     shell=$(cat <<EOF
 ${pwm_bashpass}
-${pregpg}${GPG} -d ${pwm_gpgpass} <<<'${crypted}' ${postgpg} 
+${pregpg}${GPG[@]} -d ${pwm_gpgpass} <<<'${crypted}' ${postgpg} 
 ${postcrypt}
 EOF
 )
