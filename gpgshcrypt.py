@@ -11,7 +11,7 @@ try:
 except ModuleNotFoundError:
     from getpass import getpass as pwinput
 
-GPG = 'gpg --armor --quiet --no-default-keyring --no-options --batch --yes --cipher-algo AES256'
+GPG = 'gpg --armor --quiet --no-default-keyring --no-options --batch --yes --cipher-algo AES256 --no-symkey-cache'
 
 def crypt(data, password=None):
     """ crypt data """
@@ -86,17 +86,17 @@ def cryptas(data, mode='shellout', pwmode='passwd', passvar=None,
     modes = {
         'shellenv': {
             'pregpg': '. <(',
-            'postgpg': f" 2>/dev/null|grep -x '.*' || {{ {failmsg}; echo '{pwm['unset']};return 1'; }}",
+            'postgpg': f" 2>/dev/null || {{ {failmsg}; echo '{pwm['unset']};return 1'; }}",
             'postcrypt': ')',
         },
         'shellvar': {
             'pregpg': f'{varname}=$(',
-            'postgpg': " 2>/dev/null|grep -x '.*'",
+            'postgpg': " 2>/dev/null",
             'postcrypt': f") || {{ {failmsg};{pwm['unset']}; }}"
         },
         'shellout': {
             'pregpg': '',
-            'postgpg': f" 2>/dev/null|grep -x '.*' || {{ {failmsg};{pwm['unset']}; }}",
+            'postgpg': f" 2>/dev/null || {{ {failmsg};{pwm['unset']}; }}",
             'postcrypt': ""
         }
     }
