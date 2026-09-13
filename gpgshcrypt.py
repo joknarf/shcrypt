@@ -16,8 +16,8 @@ GPG = 'gpg --armor --quiet --no-default-keyring --no-options --batch --yes --cip
 def crypt(data, password=None):
     """ crypt data """
     gpgenc = f'{GPG} -c'
-    if password:
-        gpgenc += f" --passphrase-fd 3 3<<<'{password}'"
+    password = password or pwinput('🔐 Password: ')
+    gpgenc += f" --passphrase-fd 3 3<<<'{password}'"
     #print(gpgenc, file=sys.stderr)
     runsh = run(gpgenc, input=data, stdout=PIPE, shell=True,
                 stderr=DEVNULL, encoding='utf-8', check=False, executable='/bin/bash')
@@ -52,13 +52,8 @@ def cryptas(data, mode='shellout', pwmode='passwd', passvar=None,
             varname=None, sshkey=None, password=None):
     """ crypt data to shell auto-decrypt """
     sshkey = sshkey or '~/.ssh/id_rsa'
-    passvar = passvar or uuid4().hex
     sshkeyfind = f"$([ -f {sshkey} ] && echo '{sshkey}' || echo '<(ssh-add -L 2>/dev/null|head -n 1)')"
     signwithkey= f"eval ssh-keygen -Y sign -f {sshkeyfind} -n file - <<<'{passvar}' 2>/dev/null |awk '!/---/' ORS=''"
-    if pwmode == 'sshsign':
-        password = sshsign(sshkey, passvar)
-    else:
-        password = password or pwinput('🔐 Password: ')
     #print(password, file=sys.stderr)
     crypted = crypt(data, password)
     passvar = f'__{passvar}[$$]'
@@ -115,7 +110,7 @@ if __name__ == '__main__':
     parser.add_argument("-m", "--mode", default='shellenv', help="output mode",
                         choices=['raw', 'shellenv', 'shellvar', 'shellout'])
     parser.add_argument("-p", "--pwmode", default='pwcache', help="password mode",
-                        choices=['password', 'pwcache', 'sshsign', 'pwcache2'])
+                        choices=['passwd', 'pwcache', 'sshsign', 'pwcache2'])
     parser.add_argument("-v", "--var", required=False, help="variable name (shvar)")
     parser.add_argument("-k", "--key", required=False, help="sshkey to get signature password (sshsign)")
     parser.add_argument("-c", "--cachevar", required=False, help="password cache variable")
@@ -138,20 +133,18 @@ if __name__ == '__main__':
     if args.passfile:
         with open(args.passfile, 'r') as f:
             password = f.read().strip()
+    elif args.pwmode == 'sshsign':
+        args.cachevar = args.cachevar or uuid4().hex
+        password = sshsign(args.key, args.cachevar)
     else:
         password = None
 
     if args.decrypt:
-        if args.pwmode == 'sshsign':
-            sys.stdout.write(decrypt(indata, sshsign(args.key)))
-        else:
-            sys.stdout.write(decrypt(indata))
+        sys.stdout.write(decrypt(indata, password))
         sys.exit(0)
 
     if args.mode == 'raw':
-        if args.pwmode == 'sshsign':
-            sys.stdout.write(crypt(indata, sshsign(args.key)))
-        else:
-            sys.stdout.write(crypt(indata))
+        sys.stdout.write(crypt(indata, password))
         sys.exit(0)
+        
     sys.stdout.write(cryptas(indata, args.mode, args.pwmode, args.cachevar, args.var, args.key, password))
