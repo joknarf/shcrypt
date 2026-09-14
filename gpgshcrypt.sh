@@ -1,13 +1,5 @@
 #!/usr/bin/env bash
 # gpg encrypt to autodecrypt shell/raw
-# Bash translation of the original python3 script.
-#
-# Notes on fidelity to the original:
-#  - Same limitations apply: passwords containing single quotes will
-#    break the embedded heredocs, exactly as in the python version.
-#  - Command substitution in bash strips trailing newlines from stdin,
-#    unlike python's sys.stdin.read(); this is an unavoidable minor
-#    difference from a pure-bash translation.
 
 set -o pipefail
 
@@ -101,11 +93,11 @@ cryptas() {
     local bashpass=": \${${passvar}:=\$(bash -c 'read -s -p \"🔐 Password: \" p;echo >&2;base64 <<<\"\$p\"')}"
     local failmsg="echo 'Error: Failed to decrypt' >&2"
 
-    local pwm_bashpass pwm_gpgpass pwm_unset
+    local pwm_bashpass pwm_gpgpass pwm_unset pwm_crypted="<<<'$crypted'"
     case "$pwmode" in
         passwd)
-            pwm_bashpass=''
-            pwm_gpgpass=''
+            GPG=(gpg --armor --cipher-algo AES256)
+            pwm_crypted="<(printf %s '$crypted')"
             pwm_unset=':'
             ;;
         pwcache)
@@ -119,7 +111,6 @@ cryptas() {
             pwm_unset="unset ${passvar}"
             ;;
         sshsign)
-            pwm_bashpass=''
             pwm_gpgpass="--passphrase-file <($signwithkey)"
             pwm_unset=':'
             ;;
@@ -155,7 +146,7 @@ cryptas() {
     local shell
     shell=$(cat <<EOF
 ${pwm_bashpass}
-${pregpg}${GPG[@]} -d ${pwm_gpgpass} <<<'${crypted}' ${postgpg} 
+${pregpg}${GPG[@]} -d ${pwm_gpgpass} ${pwm_crypted} ${postgpg} 
 ${postcrypt}
 EOF
 )
